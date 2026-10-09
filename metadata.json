@@ -1,0 +1,6 @@
+{
+  "name": "MERN Real-Time Chat",
+  "description": "Full-stack real-time chat application with Express, Socket.io, live presence, message history, and multi-room channels.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

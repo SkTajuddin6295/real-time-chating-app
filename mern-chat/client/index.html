@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script>
+    (function() {
+      try {
+        var originalFetch = window.fetch ? window.fetch.bind(window) : null;
+        var customFetch = originalFetch;
+        Object.defineProperty(window, 'fetch', {
+          get: function() {
+            return customFetch;
+          },
+          set: function(val) {
+            customFetch = val;
+          },
+          configurable: true,
+          enumerable: true
+        });
+      } catch (e) {}
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MERN Chat - Real-Time Socket.io Messenger</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- 1. LOGIN / ROOM SELECT SCREEN -->
+    <div id="login-screen" class="screen">
+      <div class="login-card">
+        <div class="brand-header">
+          <div class="brand-icon">💬</div>
+          <h1>MERN Chat</h1>
+          <p class="subtitle">Real-time messaging powered by Express, MongoDB & Socket.io</p>
+        </div>
+
+        <form id="login-form">
+          <div class="form-group">
+            <label for="username-input">Choose Your Username</label>
+            <input 
+              type="text" 
+              id="username-input" 
+              placeholder="e.g. Alex, Sam, DevMaster" 
+              maxlength="25" 
+              required 
+              autocomplete="off" 
+            />
+          </div>
+
+          <div class="form-group">
+            <label>Select an Avatar</label>
+            <div class="avatar-grid" id="avatar-picker">
+              <!-- Dynamically populated or static avatars -->
+              <button type="button" class="avatar-option selected" data-avatar="bot1">🤖</button>
+              <button type="button" class="avatar-option" data-avatar="fox">🦊</button>
+              <button type="button" class="avatar-option" data-avatar="cat">🐱</button>
+              <button type="button" class="avatar-option" data-avatar="ninja">🥷</button>
+              <button type="button" class="avatar-option" data-avatar="astronaut">👨‍🚀</button>
+              <button type="button" class="avatar-option" data-avatar="alien">👾</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="room-select">Choose a Room</label>
+            <select id="room-select">
+              <option value="general"># general (Default)</option>
+              <option value="tech-chat"># tech-chat</option>
+              <option value="random"># random</option>
+              <option value="help"># help</option>
+              <option value="__custom__">+ Create custom room...</option>
+            </select>
+            <input 
+              type="text" 
+              id="custom-room-input" 
+              placeholder="Enter custom room name" 
+              class="hidden" 
+              maxlength="20"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary" id="join-btn">
+            Join Chat Room
+          </button>
+        </form>
+
+        <div class="login-footer">
+          <span>Backend: Node.js & Socket.io</span>
+          <span class="bullet">•</span>
+          <span>Database: MongoDB Schema</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. MAIN CHAT DASHBOARD SCREEN -->
+    <div id="chat-screen" class="screen hidden">
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-brand">
+            <span class="logo-emoji">💬</span>
+            <span class="brand-text">MERN Chat</span>
+          </div>
+          <div class="connection-status" id="connection-status" title="Socket connection state">
+            <span class="status-dot"></span>
+            <span class="status-label">Online</span>
+          </div>
+        </div>
+
+        <!-- CURRENT USER PROFILE -->
+        <div class="current-user-card">
+          <div class="user-avatar" id="current-user-avatar">🤖</div>
+          <div class="user-info">
+            <div class="user-name" id="current-user-name">Guest</div>
+            <div class="user-room-badge" id="current-room-badge"># general</div>
+          </div>
+        </div>
+
+        <!-- ROOMS SECTION -->
+        <div class="sidebar-section">
+          <div class="section-title">
+            <span>CHANNELS</span>
+            <button id="add-room-btn" title="Create Room" class="icon-btn">+</button>
+          </div>
+          <ul class="room-list" id="room-list">
+            <li class="room-item active" data-room="general">
+              <span class="hash">#</span>
+              <span class="room-name">general</span>
+            </li>
+            <li class="room-item" data-room="tech-chat">
+              <span class="hash">#</span>
+              <span class="room-name">tech-chat</span>
+            </li>
+            <li class="room-item" data-room="random">
+              <span class="hash">#</span>
+              <span class="room-name">random</span>
+            </li>
+            <li class="room-item" data-room="help">
+              <span class="hash">#</span>
+              <span class="room-name">help</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- ACTIVE ONLINE USERS -->
+        <div class="sidebar-section users-section">
+          <div class="section-title">
+            <span>ONLINE IN ROOM (<span id="online-count">0</span>)</span>
+          </div>
+          <ul class="users-list" id="online-users-list">
+            <!-- Populated via Socket.io room_users event -->
+          </ul>
+        </div>
+
+        <!-- SIDEBAR FOOTER -->
+        <div class="sidebar-footer">
+          <button id="sound-toggle" class="sidebar-btn" title="Toggle Sound">
+            <span id="sound-icon">🔔</span> Sound On
+          </button>
+          <button id="leave-room-btn" class="sidebar-btn danger" title="Switch User or Room">
+            🚪 Leave
+          </button>
+        </div>
+      </aside>
+
+      <!-- CHAT MAIN AREA -->
+      <main class="chat-main">
+        <!-- TOP CHAT HEADER -->
+        <header class="chat-header">
+          <div class="header-left">
+            <button id="mobile-menu-btn" class="icon-btn mobile-only">☰</button>
+            <div class="room-meta">
+              <h2 id="active-room-title"># general</h2>
+              <span class="member-count" id="active-room-subtitle">Real-time room</span>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="search-box">
+              <input type="text" id="message-search" placeholder="Search in room..." />
+            </div>
+            <button id="clear-chat-btn" class="icon-btn" title="Clear local screen">🧹</button>
+          </div>
+        </header>
+
+        <!-- MESSAGES CONTAINER -->
+        <div class="messages-container" id="messages-container">
+          <div class="chat-welcome">
+            <div class="welcome-icon">👋</div>
+            <h3>Welcome to #<span id="welcome-room-name">general</span></h3>
+            <p>This room history is synchronized with the Express & Socket.io server.</p>
+          </div>
+          <div id="messages-list">
+            <!-- Chat message bubbles injected dynamically -->
+          </div>
+        </div>
+
+        <!-- TYPING INDICATOR -->
+        <div class="typing-indicator-bar" id="typing-indicator-bar">
+          <span class="typing-dots"><span></span><span></span><span></span></span>
+          <span id="typing-text">Someone is typing...</span>
+        </div>
+
+        <!-- CHAT INPUT COMPOSER -->
+        <footer class="chat-composer">
+          <!-- EMOJI QUICK PICKER -->
+          <div class="quick-emojis">
+            <button type="button" class="quick-emoji-btn" data-emoji="👍">👍</button>
+            <button type="button" class="quick-emoji-btn" data-emoji="❤️">❤️</button>
+            <button type="button" class="quick-emoji-btn" data-emoji="🔥">🔥</button>
+            <button type="button" class="quick-emoji-btn" data-emoji="🎉">🎉</button>
+            <button type="button" class="quick-emoji-btn" data-emoji="🚀">🚀</button>
+            <button type="button" class="quick-emoji-btn" data-emoji="😂">😂</button>
+          </div>
+
+          <form id="message-form" class="message-form">
+            <textarea
+              id="message-input"
+              placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+              rows="1"
+              required
+            ></textarea>
+            <button type="submit" id="send-btn" class="send-btn" title="Send Message">
+              <span>Send</span>
+              <span class="send-icon">➤</span>
+            </button>
+          </form>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- Socket.io Client Library -->
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <!-- Client Application Logic -->
+  <script src="script.js"></script>
+</body>
+</html>
